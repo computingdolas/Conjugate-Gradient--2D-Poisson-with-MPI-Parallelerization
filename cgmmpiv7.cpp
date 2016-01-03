@@ -501,25 +501,56 @@ int main(int argc, char *argv[])
     
     if(cart_rank==0)
     {
+      //std::cout << sqrt(delta_1) ;
       if(terminate(sqrt(delta_1)))
       {  
         isSolutionConverged=1;
+        std::cout << "Solution converged after " << count+ 1 << " iterations\n";
         std::cout<<"I am inside terminate loop "<<std::endl;
-        MPI_Bcast(&isSolutionConverged,1,MPI_INT,0,new_comm);
+        std::cout << "after b cast\n";
       }
     }
 
-    MPI_Barrier(new_comm);
 
-    if(count==15)
+    MPI_Barrier(new_comm);
+    MPI_Bcast(&isSolutionConverged,1,MPI_INT,0,new_comm);
+  //  std::cout<<"iteration := "<<count+1<<std::endl;
+   // std::cout<<"I am rank := "<<cart_rank<<"and my value of isSolutionConverged is:="<<isSolutionConverged<<std::endl;
+
+     //*********************************************
+    // processor 0 will receive the u's form all ***
+    // other processors ******************************
+    //********************************************* 
+    if(isSolutionConverged)
     {
-      std::cout<<"iteration :="<<count+1<<std::endl;
+     // std::cout<<"iteration :="<<count+1<<std::endl;
+      if(cart_rank !=0)
+      {  
+      MPI_Send(u+ (cart_rank*domain[1]*numgridpoints_x),sizeproc,MPI_DOUBLE,0,4,new_comm);
+      }
+      else
+      {
+        MPI_Status status; 
+        for(int i=1; i<size-1; ++i)
+        {  
+        MPI_Recv(u+ i*sizeproc, sizeproc,MPI_DOUBLE,i,4,new_comm,&status);
+        }
+
+        if(domain[4] == 1)
+         MPI_Recv(u+ (size-1)*sizeproc, sizeproc,MPI_DOUBLE,size-1,4,new_comm,&status);
+        else   
+        MPI_Recv(u+ (size-1)*sizeproc, domain[3]*numgridpoints_x,MPI_DOUBLE,size-1,4,new_comm,&status);
+      }
+
+      MPI_Barrier(new_comm);
+
+      if(cart_rank == 0)
+      write_sol(u,hx,hy,numgridpoints_x,numgridpoints_y);
+  
       break;
     }
 
-    //std::cout<<"iteration :="<<count+1<<std::endl;
-    //std::cout<<"I am rank := "<<cart_rank<<"and my value od isSolutionConverged is:="<<isSolutionConverged<<std::endl;
-
+    
     //if( count is equivalent to converged solution we will write the solution) This part is pending
     /*if(count == 300)
     {
