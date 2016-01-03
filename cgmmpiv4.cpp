@@ -404,19 +404,19 @@ int main(int argc, char *argv[])
   //************************************************
   //*** ASSIGNMENT OF D ****************************
   //************************************************
-  
-  if( down< 0)
+  // if I am 0th guy then 
+  if(down< 0)
       {
         //std::cout<<"i am rank "<<cart_rank<<std::endl;
-        for (int i = 0; i < sizeproc; ++i)
-        {
-          d[i]=r[i] ;// Assign r to d 
-          //std::cout<<d[i]<<std::endl;
-        }
+         for (int i = 0; i < sizeproc; ++i)
+         {
+           d[i]=r[i] ;// Assign r to d 
+        //   std::cout<<d[i]<<std::endl;
+         }
   
       }
-      
-  if( up<0 )
+  // This else covers 2 cases : interior processer and extreme up processor     
+  else 
       {
         //std::cout<<"i am rank "<<cart_rank<<std::endl;
         for (int i = 0; i < sizeproc; ++i)
@@ -426,48 +426,112 @@ int main(int argc, char *argv[])
         }
       }
   
-  else
-  {
-    //std::cout<<"I am rank  "<<cart_rank<<std::endl;
-    for (int i = 0; i < sizeproc; ++i)
-    {
-      d[i+numgridpoints_x]=r[i];
-    }
-  }
+ //  if(down < 0)
+ //  {
+ //    for(int i=0;i<sizeproc; ++i)
+ //    std::cout << d[i] << "  ";
+ //    std::cout << "\n";
+ // }
 
   // CG Loop 
   //for (int i = 0; i < num_iter; ++i)
   //{
     // Communicate D
     
-    if(up>0)
+   // MPI_Request request[6];
+    MPI_Status status[3];
+    // Send up  
+    if(cart_rank == 0)
     {
-      std::cout<<" I am rank"<<cart_rank<<std::endl;
-      std::cout<<std::endl;
+      //std::cout<<" I am rank"<<cart_rank<<std::endl;
+    //  std::cout << "My rank is : " <<  cart_rank << "and I am Sending to  " << up << std::endl;
+      //std::cout<<std::endl;
       //MPI_Isend(up)
+      // Which one to send 
+      //MPI_Request request;
+     //  std::cout <<" sizeproc is : " << sizeproc << 
+     // "\n";
+      MPI_Send(d + sizeproc-numgridpoints_x, numgridpoints_x, MPI_DOUBLE, up, 2,new_comm);
+      //  std::cout << "d for rank 0 is \n";
+      // for(int i=0;i<sizeproc+numgridpoints_x; ++i)
+      // {
+      //   std::cout << d[i] << std::endl;
+      // }
+     
     }
-    /*
-    if(down>=0 )
+   // interrior point
+    else if(up>0 && (cart_rank==1) )
     {
-      std::cout<<" I am rank"<<cart_rank<<std::endl;
-      std::cout<<std::endl;
-      // MPI_Irecv(up)
+      // MPI_Request request;
+       // It has one ghost cell so 
+       MPI_Send(d + sizeproc, numgridpoints_x, MPI_DOUBLE, up, 2,new_comm);
+
     }
     
+   // MPI_Barrier(new_comm);
+
+    // Receive from down
     if(down>=0)
     {
-      std::cout<<" I am rank"<<cart_rank<<std::endl;
-      std::cout<<std::endl;
-      //MPI_Isend(down)
+     // std::cout<<" I am rank"<<cart_rank<<std::endl;
+      //std::cout<<std::endl;
+      //MPI_Request request;
+      MPI_Recv(d,numgridpoints_x, MPI_DOUBLE, down,2,new_comm,&status[0]);
+     // std::cout << "Source of 2 is " << status[0].MPI_SOURCE << "\n";
+   // std::cout <<  " MPI_ERROR is: " << status[0].MPI_ERROR << "\n";
+   
     }
-      
-    if(up>0)
+    //MPI_Barrier(new_comm);
+    
+   // Each process will send the data downwards 
+    // send down
+   if(down>=0 && (cart_rank == 2) )
     {
-      std::cout<<" I am rank"<<cart_rank<<std::endl;
+      //std::cout<<" I am rank"<<cart_rank<<std::endl;
       std::cout<<std::endl;
-      //MPI_Irecv(down)
+      //MPI_Request request; 
+      MPI_Send(d+numgridpoints_x,numgridpoints_x,MPI_DOUBLE,down,3,new_comm); 
+
+      // std::cout << "I am rank " << cart_rank << " and I have sent the following data to "<< down << "\n";
+      // for(int i=0; i<numgridpoints_x; i++)
+      //   std::cout << d[numgridpoints_x+i] <<"\n";
+
     }
-    */
+    
+    //MPI_Barrier(new_comm);
+
+    // Receive from up
+    if(cart_rank ==0)
+    {
+      //MPI_Request request;
+      MPI_Recv(d+sizeproc,numgridpoints_x, MPI_DOUBLE, up,3,new_comm,&status[1]);
+      //std::cout <<  " MPI_ERROR is: " << status[0].MPI_ERROR << "\n";
+
+      // std::cout << "I am rank " << cart_rank << " and I have received the following data from  "<< up << "\n";
+      // for(int i=0; i<numgridpoints_x; i++)
+      //   std::cout << d[sizeproc+i] <<"\n";
+  
+    }
+
+   else if(up>0 && (cart_rank ==1) )
+    {
+      //MPI_Request request;
+      MPI_Recv(d+sizeproc+numgridpoints_x,numgridpoints_x, MPI_DOUBLE, up,3,new_comm, &status[2]);
+      //std::cout <<  " MPI_ERROR is: " << status[0].MPI_ERROR << "\n";
+   
+    }
+
+   // MPI_Barrier(new_comm);
+
+   // //  if(cart_rank ==1)
+   // //  {
+   // //    std::cout << " printing d for processor 1\n"; 
+   // //    for(int i=0; i<sizeproc+2*numgridpoints_x; ++i) 
+   // //    std::cout << d[i] << "\n";
+
+   // }
+  
+  //MPI_Waitall(6,request,status);
     
   //}
     
