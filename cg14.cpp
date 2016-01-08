@@ -37,13 +37,13 @@ const double con_sinh = 267.744894041; // This is sinh(2*pi)
 //**************************************************
 
 inline void domaindecompose(const size_t &numy,const int &size,int domain[]);
-inline void Boundary_Init(const int &numx,const int &numy,const double hx,std::vector<double> &u);
-inline void func_init(const int &numx,const int &numy,const double &hx,const double &hy,std::vector<double>& f);
+inline void Boundary_Init(const int &numx,const int &numy,const double hx,double *u);
+inline void func_init(const int &numx,const int &numy,const double &hx,const double &hy,std::vector<double>& f,const int& cart_rank,const int& size);
 inline double Compute_Matrix_Vec_Mult(const double &u_center,const double &u_left,const double &u_right,const double &u_up,const double &u_down,const double &constant,const double &hxsqinv,const double &hysqinv);
-void calInnerGridIndexes(const int &numGridX,const int &numGridY,std::vector<int>& ind) ;
+void calInnerGridIndexes(const int &numGridX,const int &numGridY,std::vector<int>& ind, const int &cart_rank, const int &size,  const int &numGridTotY);
 inline void write_sol(const std::vector<double> &u_temp,const double hx,const double hy,const int numx,const int numy);
 inline bool terminate(const double value, const double tol);
-inline double cal_Scalar_Product(const std::vector<double> &temp_r,const int size); 
+inline double cal_Scalar_Product(const double *temp_r,const int size);
 
 
 
@@ -126,7 +126,7 @@ int main(int argc, char *argv[])
     double delta_0=0.;
     double scalar_Product_d_z = 0.,global_scalar_Product_d_z=0.;
     double scalar_Product_r_r = 0.,delta_1=0.;
-    std::vector<int> proc_ind;
+    std::vector<int> ind;
     double alpha, beta;
     int isSolutionConverged = 0; 
 
@@ -179,21 +179,24 @@ int main(int argc, char *argv[])
     double u[sizeproc]={0.0};
     double d[sizeproc + 2* numgridpoints_x]={0.0};
     double z[sizeproc + 2* numgridpoints_x]={0.0};
+    int numRowsProc = sizeproc/numgridpoints_x;
 
     // Funtion declarations
-
     std::vector<double> f(sizeproc,0.0);
 
     // Changing func_init ,so we have change function definition 
-    func_init(numgridpoints_x, (sizeproc/numgridpoints_x) ,hx,hy,f,cart_rank); 
+    func_init(numgridpoints_x, numRowsProc,hx,hy,f,cart_rank,size); 
 
     // Boundary initialization for top processor 
-    if(cart_rank== size-1)
+    if(cart_rank == size-1)
     {	
-    	Boundary_Init(numgridpoints_x,numgridpoints_y,hx,u);
+    	Boundary_Init(numgridpoints_x,numRowsProc,hx,u);
+      std::cout << " u for last processor is: " << std::endl;
+      for(int i=0; i<sizeproc; ++i)
+        std::cout << u[i] << std::endl;
     }
 
-    std::vector<int> proc_ind; // Every processor have local indices array 
+   // std::vector<int> ind; // Every processor have local indices array 
 
     // Every processor will calculate own indieces 
     //************************************************
@@ -203,15 +206,17 @@ int main(int argc, char *argv[])
  	if(up<0 || down <0)
     {  
       new_x= numgridpoints_x;
-      new_y = (sizeproc/numgridpoints_x) + 1;
+      new_y = numRowsProc + 1;
     }
     else
     {
       new_x = numgridpoints_x;
-      new_y = (sizeproc/numgridpoints_x) + 2;
+      new_y = numRowsProc+ 2;
     }
 
-    calInnerGridIndexes(new_x,new_y,ind);
+    // new_x is no of cols and new_y is no of rows of each process including ghost cells
+    // numgridpoints_y - 2+(2*size) is max total no of rows (including ghost cells)
+    calInnerGridIndexes(new_x,new_y,ind,cart_rank,size, numgridpoints_y - 2+(2*size) );
 
     // Computing the residual by rank 0 ;
 
@@ -223,6 +228,7 @@ int main(int argc, char *argv[])
         double u_center= u[ind[i]];
         r[ind[i]]= f[ind[i]] - Compute_Matrix_Vec_Mult(u_center,u_left,u_right,u_up,u_down,constant,hxsqinv,hysqinv);
       }
+
     delta_0=cal_Scalar_Product(r,numgridpoints_x*numgridpoints_y);
 
 
@@ -254,7 +260,7 @@ int main(int argc, char *argv[])
       	d[i+numgridpoints_x]=r[i];
     	
     	}
-	}
+	  }
 
 	//*******************************************
     //Start the timer
@@ -342,19 +348,19 @@ int main(int argc, char *argv[])
     	// Compute z = Ad ******************************
     	//********************************************* 
 
-    	for (unsigned int i = 0; i < proc_ind.size(); ++i)
+    	for (unsigned int i = 0; i < ind.size(); ++i)
     	{
-      	double d_left= d[proc_ind[i]-1];
-      	double d_right= d[proc_ind[i]+1];
-      	double d_up= d[proc_ind[i]+numgridpoints_x];
-      	double d_down = d[proc_ind[i]-numgridpoints_x];
-      	double d_center= d[proc_ind[i]];
+      	double d_left= d[ind[i]-1];
+      	double d_right= d[ind[i]+1];
+      	double d_up= d[ind[i]+numgridpoints_x];
+      	double d_down = d[ind[i]-numgridpoints_x];
+      	double d_center= d[ind[i]];
 
-      	z[proc_ind[i]] =  Compute_Matrix_Vec_Mult(d_center,d_left,d_right,d_up,d_down,constant,hxsqinv,hysqinv);
+      	z[ind[i]] =  Compute_Matrix_Vec_Mult(d_center,d_left,d_right,d_up,d_down,constant,hxsqinv,hysqinv);
 
 	    }
 
-	    // Convert Ind to prod_ind
+	    // Convert Ind to ind
 
 	    //*********************************************
     	// Compute alpha = delta_0/ (d,z)  ************
@@ -420,6 +426,10 @@ int main(int argc, char *argv[])
 
     MPI_Barrier(new_comm);
 
+    // Something more goes here
+
+ }   
+
 
     
 	MPI_Finalize();
@@ -473,14 +483,14 @@ void domaindecompose(const size_t &numy,const int &size,int domain[])
   
 	
 }
-//******************************
-// Boundary value Initialisation 
+//*******************************************************************
+// Boundary value Initialisation  for processor with rank size-1
 
-inline void Boundary_Init(const int &numx,const int &numy,const double hx,std::vector<double> &u){
-  // Implementig the boundary value
+inline void Boundary_Init(const int &numx,const int &numy,const double hx,double *u){
+  // Implementing the boundary value
   for (auto i = (numy-1) * numx; i < (numx * numy) ; ++i ) {
       u[i] = (con_sinh* sin(2 * PI * (hx *(i - ((numy - 1) * numx)))));
-      //std::cout<<"The value of u is"<<u[i]<<std::endl;
+      std::cout<<"The value of u is"<<u[i]<<std::endl;
   }
   //std::cout << "Checking boundary value initilization" << std::endl;
 }
@@ -489,10 +499,27 @@ inline void Boundary_Init(const int &numx,const int &numy,const double hx,std::v
 //******************************
 // Functional Initialisation 
 
-inline void func_init(const int &numx,const int &numy,const double &hx,const double &hy,std::vector<double>& f){
+inline void func_init(const int &numx,const int &numy,const double &hx,const double &hy,std::vector<double>& f,const int& cart_rank,const int &size)
+{
   // Updating the function value on any domain
   double x,y;
-  for (auto i = 0; i < numx * numy; ++i) {
+  int start,end;
+
+  if(cart_rank == size-1) 
+   { 
+  int numgridpoints_y = 1.0/hy + 1;
+  end = numgridpoints_y*numx;
+  start = end - (numx* numy);
+  }
+
+  else 
+  {  
+  start = cart_rank*numx*numy;
+  end = start + (numx*numy) ;
+  }
+
+ 
+  for (int i = start; i < end; ++i) {
     x = hx * (i % numx);
     y = hy * (i / numx);
     f[i] = 4 * PI *PI * sin(2 * PI * x) * sinh(2* PI * y );
@@ -545,7 +572,7 @@ inline bool terminate(const double value, const double tol){
 
 //*****************************
 // Scalar product function 
-inline double cal_Scalar_Product(const std::vector<double> &temp_r,const int size){
+inline double cal_Scalar_Product(const double *temp_r,const int size){
   // Calculating the norm of the vector
   double sum(0);
   for (auto i = 0; i < size; i++) {
@@ -557,12 +584,28 @@ inline double cal_Scalar_Product(const std::vector<double> &temp_r,const int siz
 
 
 //******************************
-// Correct idex calculator Function. It calculates the inner points in any domain
+// Correct idex calculator Function. It calculates the processors's index
 
-void calInnerGridIndexes(const int &numGridX,const int &numGridY,std::vector<int>& ind) {
-  
-    for(auto i=1; i<numGridY - 1; ++i) {
-       for(auto j=1 ;j<numGridX-1;++j) {
+void calInnerGridIndexes(const int &numGridX,const int &numGridY,std::vector<int>& ind, const int &cart_rank, const int &size,  const int &numGridTotY) {
+
+    // start is the first actual row (excluding the ghost one) end 1st past the last row
+    int start,end;
+    if (cart_rank != size-1)
+    {  
+      start = cart_rank*numGridY + 1;
+      end = start + numGridY -1;
+    }
+    else
+    {
+      start = numGridTotY - numGridY;
+      end = numGridTotY - 1;
+    } 
+
+
+     for(auto i=start; i < end; ++i) 
+     {
+      for(auto j=1 ;j<numGridX-1;++j) 
+      {
         ind.push_back(i*numGridX +j);
       }
     }
